@@ -1,6 +1,7 @@
 from .justdoit import *
 from .justplotit import *
 from .parameterizations import Parameterize,cloud_averaging
+from .citations import get_citations
 
 import warnings
 import tomllib 
@@ -98,8 +99,67 @@ def run(driver_file=None,driver_dict=None,return_class=False):
     
     if return_class:
         return output ,picaso_class
-    else: 
+    else:
         return output
+
+def references(driver_file=None, driver_dict=None):
+    """
+    Get the DOI references for the pt_/chem_/cloud_ parameterizations
+    selected in a driver file, without running any calculation.
+
+    This statically reads the [temperature], [chemistry], and [clouds]
+    sections of the driver config -- the same sections `driver.run` uses to
+    pick which Parameterize method to call via getattr -- and looks up any
+    DOIs registered against those method names with the `@cite` decorator
+    in parameterizations.py. Parameterizations that have not been tagged
+    with a citation are silently skipped.
+
+    Parameters
+    ----------
+    driver_file : str
+        Path to a driver toml file (as used by driver.run)
+    driver_dict : dict
+        Already-loaded driver config (alternative to driver_file)
+
+    Returns
+    -------
+    dict
+        {'temperature': [doi,...], 'chemistry': [doi,...], 'clouds': [doi,...]}
+        Deduplicated DOI strings per section (toml-serializable, e.g. via toml.dump)
+    """
+    if isinstance(driver_file,str):
+        with open(driver_file, "rb") as f:
+            config = tomllib.load(f)
+    elif isinstance(driver_dict,dict):
+        config = driver_dict
+    else:
+        raise Exception('Could not interpret either driver file or dictionary input')
+
+    dois = {'temperature':[], 'chemistry':[], 'clouds':[]}
+
+    #temperature: mirrors PT_handler's dispatch. userfile and sonora_bobcat
+    #don't call a pt_ prefixed Parameterize method, everything else does
+    pt_type = config.get('temperature',{}).get('profile')
+    if pt_type and pt_type not in ('userfile','sonora_bobcat'):
+        dois['temperature'] = list(get_citations(f'pt_{pt_type}'))
+
+    #chemistry: mirrors setup_spectrum_class's dispatch
+    chem_type = config.get('chemistry',{}).get('method','')
+    if chem_type and chem_type != 'userfile':
+        dois['chemistry'] = list(get_citations(f'chem_{chem_type}'))
+
+    #clouds: mirrors setup_spectrum_class's dispatch, one cloud_ function per cloud layer
+    cloud_config = config.get('clouds',None)
+    if isinstance(cloud_config, dict):
+        cloud_names = [i.split('_type')[0] for i in cloud_config.keys() if 'type' in i]
+        for icld in cloud_names:
+            cld_type = cloud_config.get(f'{icld}_type')
+            if cld_type and cld_type != 'userfile':
+                for doi in get_citations(f'cloud_{cld_type}'):
+                    if doi not in dois['clouds']:
+                        dois['clouds'] += [doi]
+
+    return dois
 
 def is_valid_astropy_unit(unit_str):
     try:
