@@ -369,3 +369,10 @@ for i in go.cloud_options:#running everything except userfile since the pressure
     config['clouds']['cloud1_type']=i
     print(i)
     test1 = go.run(driver_dict =config)
+
+# %% [markdown]
+# ## Automated Citation Tracking System
+#
+# You can see what citations are associated with the temperature, chemistry, and or cloud functions you use:
+# %%
+go.references(driver_dict=config)
